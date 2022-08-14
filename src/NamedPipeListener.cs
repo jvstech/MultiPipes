@@ -20,15 +20,13 @@ namespace Jvs.MultiPipes
       }
     }
 
-    public WaitHandle ConnectionReceivedEvent => connection_received_.WaitHandle;
-
     public bool IsListening
     {
       get;
       private set;
     }
 
-    private NamedPipeServerStream Server { get; set; } = null;
+    private NamedPipeServerStream Server { get; set; }
 
     private ConcurrentQueue<NamedPipeServerStream> Clients { get; } = new();
 

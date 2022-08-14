@@ -1,29 +1,53 @@
-﻿// https://codereview.stackexchange.com/questions/93154/memoryqueuebufferstream
+﻿// See: https://codereview.stackexchange.com/questions/93154/memoryqueuebufferstream
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.Contracts;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace Jvs.MultiPipes
 {
+  /// <summary>
+  /// Stores data only until it is read, unlike a <see cref="byte[]"/> or a 
+  /// <see cref="MemoryStream"/> which store data until their disposal.
+  /// </summary>
+  /// <remarks>
+  /// This is meant to be used as a temporary storage buffer for data being read constantly from an
+  /// resource such as a socket or a pipe. This allows data to be read even if the resource is
+  /// disposed before the user has been able to access it.
+  /// </remarks>
   public class ReadBufferStream : Stream
   {
     private class TrackedBuffer
     {
+      /// <summary>
+      /// Offset in `Data` from where to start reading.
+      /// </summary>
       public int Index { get; set; }
       public byte[] Data { get; set; }
       public int Length => Data?.Length - Index ?? 0;
+
+      /// <summary>
+      /// Advances the read offset by `count` bytes and returns false if the end of the buffer has
+      /// been reached.
+      /// </summary>
+      public bool Advance(int count)
+      {
+        Debug.Assert(count >= 0, nameof(count) + " is negative");
+        if (count == 0)
+        {
+          return (Data.Length != 0 && Index < Data.Length);
+        }
+
+        Index += count;
+        return (Index < Data.Length);
+      }
     }
 
     private bool is_open_ = true;
     private readonly Queue<TrackedBuffer> buffers_ = new();
     private readonly ManualResetEventSlim on_data_available_ = new(false);
-    //private readonly CancellationTokenSource cancel_on_close_ = new();
     private long length_;
     private object queue_lock_ = new object();
 
@@ -54,6 +78,7 @@ namespace Jvs.MultiPipes
 
     public override int Read(byte[] buffer, int offset, int count)
     {
+      // If there are no current buffers, wait for data to arrive as long as the stream is open.
       if (buffers_.Count == 0)
       {
         if (!is_open_)
@@ -63,8 +88,7 @@ namespace Jvs.MultiPipes
 
         while (is_open_)
         {
-          bool hasData = on_data_available_.Wait(MultiPipes.CancellationCheckIntervalMs);
-          if (hasData)
+          if (on_data_available_.Wait(MultiPipes.CancellationCheckIntervalMs))
           {
             break;
           }
@@ -76,6 +100,8 @@ namespace Jvs.MultiPipes
         }
       }
 
+      // At least one tracked buffer exists, so copy the data from them (up to `count` bytes) to
+      // `buffer`.
 
       int remainingBytes = count;
       int bytesRead = 0;
@@ -84,8 +110,7 @@ namespace Jvs.MultiPipes
         while (bytesRead <= count && buffers_.Count != 0)
         {
           TrackedBuffer trackedBuffer = buffers_.Peek();
-          int unreadLength = trackedBuffer.Length;
-          int bytesToRead = Math.Min(unreadLength, remainingBytes);
+          int bytesToRead = Math.Min(trackedBuffer.Length, remainingBytes);
           if (bytesToRead <= 0)
           {
             return bytesRead;
@@ -95,13 +120,9 @@ namespace Jvs.MultiPipes
             trackedBuffer.Data, trackedBuffer.Index, buffer, offset + bytesRead, bytesToRead);
           bytesRead += bytesToRead;
           remainingBytes -= bytesToRead;
-          if (trackedBuffer.Index + bytesToRead >= trackedBuffer.Data.Length)
+          if (!trackedBuffer.Advance(bytesToRead))
           {
             buffers_.Dequeue();
-          }
-          else
-          {
-            trackedBuffer.Index += bytesToRead;
           }
         }
 
@@ -109,6 +130,7 @@ namespace Jvs.MultiPipes
         {
           if (is_open_)
           {
+            // Indicate no more data is available.
             on_data_available_.Reset();
           }
           else
@@ -127,6 +149,11 @@ namespace Jvs.MultiPipes
     public override void SetLength(long value) 
       => throw new NotSupportedException();
 
+    /// <exception cref="ArgumentException"><paramref name="count"/> is less than or equal to zero
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> is less than zero
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The stream is closed</exception>
     public override void Write(byte[] buffer, int offset, int count)
     {
       if (count <= 0)
@@ -157,8 +184,6 @@ namespace Jvs.MultiPipes
     public override void Close()
     {
       is_open_ = false;
-      //cancel_on_close_.Cancel();
-      //cancel_on_close_.Dispose();
       if (buffers_.Count == 0)
       {
         on_data_available_.Dispose();

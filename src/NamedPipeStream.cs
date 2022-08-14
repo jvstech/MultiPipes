@@ -1,10 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
-using System.Linq;
-using System.Text;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -31,7 +28,7 @@ namespace Jvs.MultiPipes
       IsConnected = client_.IsConnected;
     }
 
-    public NamedPipeStream(NamedPipeServerStream server)
+    internal NamedPipeStream(NamedPipeServerStream server)
     {
       server_ = server;
       stream_ = server_;
@@ -307,14 +304,14 @@ namespace Jvs.MultiPipes
 
     public override void Flush()
     {
-      CheckWriteOperations();
-      stream_.Flush();
+      // Do nothing. Unix pipes are unbuffered, and Windows pipes can deadlock if FlushFileBuffers
+      // is called with a remote end that stops reading (according to .NET Runtime source code).
     }
 
-    public override async Task FlushAsync(CancellationToken cancellationToken)
+    public override Task FlushAsync(CancellationToken cancellationToken)
     {
-      CheckWriteOperations();
-      await stream_.FlushAsync(cancellationToken);
+      // Do nothing. See the comment on `Flush()`.
+      return Task.CompletedTask;
     }
 
     public override int Read(byte[] buffer, int offset, int count)
@@ -466,6 +463,20 @@ namespace Jvs.MultiPipes
 
     private void HandlePipeException(Exception ex)
     {
+      if (ex is IOException ioEx && ioEx.InnerException is SocketException sockEx)
+      {
+        // Unix pipe errors are handled as socket errors.
+        switch (sockEx.SocketErrorCode)
+        {
+        case SocketError.ConnectionAborted:
+        case SocketError.ConnectionReset:
+        case SocketError.NotConnected:
+          // #TODO: Am I missing any here?
+          IsConnected = false;
+          return;
+        }
+      }
+
       switch (WindowsError.FromException(ex))
       {
       case WindowsErrorCode.BrokenPipe:
@@ -544,6 +555,8 @@ namespace Jvs.MultiPipes
           {
             if (WindowsError.FromException(ex) != WindowsErrorCode.MoreData)
             {
+              // Linux does not appear to have an equivalent error code -- probably because it
+              // doesn't return an error code on a `read` just to indicate more data can be read.
               break;
             }
           }

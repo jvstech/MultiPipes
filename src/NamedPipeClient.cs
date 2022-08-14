@@ -1,11 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
 using System.IO.Pipes;
-using System.Linq;
 using System.Security.Principal;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -41,8 +36,6 @@ namespace Jvs.MultiPipes
         name_ = value;
       }
     }
-
-    #region ConnectAsync
 
     // 1111
 
@@ -190,10 +183,6 @@ namespace Jvs.MultiPipes
       => await ConnectAsync(
         name: null, Timeout.Infinite, CancellationToken.None, TokenImpersonationLevel.None);
 
-    #endregion
-
-    #region Connect
-
     // 111
     
     public void Connect(string name, int timeoutMs, TokenImpersonationLevel impersonationLevel)
@@ -258,8 +247,6 @@ namespace Jvs.MultiPipes
     public void Connect()
       => Connect(name: null, Timeout.Infinite, TokenImpersonationLevel.None);
 
-    #endregion
-
     public void Disconnect() => Close();
 
     public void Close()
@@ -279,11 +266,8 @@ namespace Jvs.MultiPipes
       return stream_;
     }
 
-    #region Private methods
-
     private void CloseInternal()
     {
-      Debug.WriteLine("NamedPipeClient.CloseInternal() called");
       stream_?.Dispose();
       stream_ = null;
     }
@@ -327,7 +311,5 @@ namespace Jvs.MultiPipes
 
     private void ThrowIfConnected() => 
       ThrowIfConnected(isConnected: true, operation: null);
-
-    #endregion
   }
 }
