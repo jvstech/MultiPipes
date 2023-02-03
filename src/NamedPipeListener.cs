@@ -28,7 +28,13 @@ namespace Jvs.MultiPipes
 
     private NamedPipeServerStream Server { get; set; }
 
+#if NET7_0_OR_GREATER
     private ConcurrentQueue<NamedPipeServerStream> Clients { get; } = new();
+#else
+    private ConcurrentQueue<NamedPipeServerStream> clients_ = new();
+    private ConcurrentQueue<NamedPipeServerStream> Clients { get => clients_; }
+#endif
+
 
     public NamedPipeListener(string name)
     {
@@ -138,6 +144,15 @@ namespace Jvs.MultiPipes
       connection_received_.Dispose();
     }
 
+    private void ClearClients()
+    {
+#if NET7_0_OR_GREATER
+      Clients.Clear();
+#else
+      clients_ = new();
+#endif
+    }
+
     private async Task<(NamedPipeServerStream Stream, bool Ready)> DequeueClientAsync(
       int waitTime, CancellationToken cancellationToken)
     {
@@ -177,7 +192,7 @@ namespace Jvs.MultiPipes
         serverStream.Dispose();
       }
 
-      Clients.Clear();
+      ClearClients();
       IsListening = false;
     }
 

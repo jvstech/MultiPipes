@@ -319,10 +319,12 @@ namespace Jvs.MultiPipes
       return read_stream_.Read(buffer, offset, count);
     }
 
+#if NET7_0_OR_GREATER
     public override int Read(Span<byte> buffer)
     {
       return read_stream_.Read(buffer);
     }
+#endif
 
     public override async Task<int> ReadAsync(
       byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -330,11 +332,13 @@ namespace Jvs.MultiPipes
       return await read_stream_.ReadAsync(buffer, offset, count, cancellationToken);
     }
 
+#if NET7_0_OR_GREATER
     public override async ValueTask<int> ReadAsync(
       Memory<byte> buffer, CancellationToken cancellationToken)
     {
       return await read_stream_.ReadAsync(buffer, cancellationToken);
     }
+#endif
 
     public override int ReadByte()
     {
@@ -351,11 +355,13 @@ namespace Jvs.MultiPipes
       stream_.Write(buffer, offset, count);
     }
 
+#if NET7_0_OR_GREATER
     public override void Write(ReadOnlySpan<byte> buffer)
     {
       CheckWriteOperations();
       stream_.Write(buffer);
     }
+#endif
 
     public override async Task WriteAsync(
       byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -364,12 +370,14 @@ namespace Jvs.MultiPipes
       await stream_.WriteAsync(buffer, offset, count, cancellationToken);
     }
 
+#if NET7_0_OR_GREATER
     public override async ValueTask WriteAsync(
       ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
     {
       CheckWriteOperations();
       await stream_.WriteAsync(buffer, cancellationToken);
     }
+#endif
 
     public override void WriteByte(byte value)
     {
@@ -382,10 +390,12 @@ namespace Jvs.MultiPipes
       stream_.Close();
     }
 
+#if NET7_0_OR_GREATER
     public override void CopyTo(Stream destination, int bufferSize)
     {
       stream_.CopyTo(destination, bufferSize);
     }
+#endif
 
     public override async Task CopyToAsync(
       Stream destination, int bufferSize, CancellationToken cancellationToken)
@@ -393,10 +403,12 @@ namespace Jvs.MultiPipes
       await stream_.CopyToAsync(destination, bufferSize, cancellationToken);
     }
 
+#if NET7_0_OR_GREATER
     public override async ValueTask DisposeAsync()
     {
       await stream_.DisposeAsync();
     }
+#endif
 
     internal async Task ConnectAsync(int timeoutMs, CancellationToken cancellationToken)
     {
